@@ -151,6 +151,9 @@ async function forwardToBinance(method, path, params, signed, weight) {
   throw lastErr;
 }
 
+export const runtime = "nodejs";
+export const preferredRegion = "fra1"; // Frankfurt
+
 export default async function handler(req, res) {
   // Only POST
   if (req.method !== "POST") {
@@ -214,6 +217,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
-export const runtime = 'nodejs';
-export const preferredRegion = 'fra1'; // Frankfurt

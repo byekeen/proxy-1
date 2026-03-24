@@ -8,6 +8,9 @@
 import { getStats } from "@/lib/rateLimiter.js";
 import { deduplicator } from "@/lib/deduplicator.js";
 
+export const runtime = "nodejs";
+export const preferredRegion = "fra1"; // Frankfurt
+
 export default function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -25,6 +28,3 @@ export default function handler(req, res) {
     deduplicator: deduplicator.getStats(),
   });
 }
-
-export const runtime = "nodejs";
-export const preferredRegion = "fra1"; // Frankfurt

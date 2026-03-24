@@ -2,10 +2,6 @@
   "buildCommand": "next build",
   "outputDirectory": ".next",
   "installCommand": "npm install",
-  "env": {
-    "BINANCE_KEY": "@binance_key",
-    "BINANCE_SECRET": "@binance_secret"
-  },
   "functions": {
     "pages/api/**": {
       "maxDuration": 60,

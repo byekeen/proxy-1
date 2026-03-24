@@ -2,13 +2,14 @@
  * /api/proxy
  *
  * Main proxy endpoint. Bot sends requests here instead of directly to Binance.
- * Serverless-compatible (stateless rate limiting + deduplication).
+ * Runs on Vercel Edge Runtime for global distribution (bypasses geographic restrictions).
  *
  * Features:
  * - Rate limiting (token bucket, stateless)
  * - Request deduplication
  * - Exponential backoff on 429s
  * - Comprehensive logging
+ * - Edge runtime for low-latency, globally distributed execution
  *
  * Usage:
  *   POST /api/proxy
@@ -25,9 +26,30 @@
  * - BINANCE_SECRET
  */
 
-import crypto from "crypto";
 import { checkRateLimit, consumeWeight, getStats } from "@/lib/rateLimiter.js";
 import { deduplicator } from "@/lib/deduplicator.js";
+
+// Use Web Crypto API for edge runtime compatibility
+// This is available globally and works on Vercel Edge
+const sign = async (queryString, secret) => {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(queryString),
+  );
+  // Convert to hex
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
 
 const BINANCE_BASE = "https://fapi.binance.com";
 
@@ -55,13 +77,6 @@ function validateEnv() {
 
 const envValid = validateEnv();
 
-function sign(queryString) {
-  const secret = process.env.BINANCE_SECRET;
-  if (!secret) throw new Error("BINANCE_SECRET not set");
-
-  return crypto.createHmac("sha256", secret).update(queryString).digest("hex");
-}
-
 function buildQuery(params) {
   return Object.entries(params)
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
@@ -87,7 +102,8 @@ async function forwardToBinance(method, path, params, signed, weight) {
       recvWindow: 5000,
     };
     queryString = buildQuery(signedParams);
-    signedParams.signature = sign(queryString);
+    const signature = await sign(queryString, process.env.BINANCE_SECRET);
+    signedParams.signature = signature;
     queryString = buildQuery(signedParams);
   } else {
     queryString = buildQuery(params);
@@ -150,9 +166,6 @@ async function forwardToBinance(method, path, params, signed, weight) {
 
   throw lastErr;
 }
-
-export const runtime = "nodejs";
-export const preferredRegion = "fra1"; // Frankfurt
 
 export default async function handler(req, res) {
   // Only POST
@@ -217,3 +230,12 @@ export default async function handler(req, res) {
     });
   }
 }
+
+/**
+ * Configure edge runtime for global distribution
+ * This enables the proxy to run on Vercel's Edge Network across multiple regions,
+ * bypassing geographic restrictions from IP-based filtering services.
+ */
+export const config = {
+  runtime: "edge",
+};

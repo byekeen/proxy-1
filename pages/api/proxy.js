@@ -19,6 +19,10 @@
  *     "signed": true,
  *     "weight": 10
  *   }
+ * 
+ * IMPORTANT: Set environment variables on Vercel:
+ * - BINANCE_KEY
+ * - BINANCE_SECRET
  */
 
 import crypto from 'crypto';
@@ -26,6 +30,30 @@ import { checkRateLimit, consumeWeight, getStats } from '@/lib/rateLimiter.js';
 import { deduplicator } from '@/lib/deduplicator.js';
 
 const BINANCE_BASE = 'https://fapi.binance.com';
+
+// Validate environment variables at module load
+function validateEnv() {
+  const errors = [];
+  
+  if (!process.env.BINANCE_KEY) {
+    errors.push('BINANCE_KEY is not set');
+  }
+  
+  if (!process.env.BINANCE_SECRET) {
+    errors.push('BINANCE_SECRET is not set');
+  }
+  
+  if (errors.length > 0) {
+    console.error('[PROXY] ❌ Environment validation failed:');
+    errors.forEach(e => console.error(`  - ${e}`));
+    console.error('[PROXY] Set these in Vercel Environment Variables');
+    return false;
+  }
+  
+  return true;
+}
+
+const envValid = validateEnv();
 
 function sign(queryString) {
   const secret = process.env.BINANCE_SECRET;
@@ -133,6 +161,16 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check environment variables first
+    if (!envValid) {
+      return res.status(500).json({
+        success: false,
+        error: 'Proxy not configured - BINANCE_KEY and/or BINANCE_SECRET not set in environment',
+        code: 'ENV_NOT_SET',
+        hint: 'Set these variables in Vercel Environment Variables dashboard'
+      });
+    }
+
     const { method, path, params = {}, signed = false, weight = 10 } = req.body;
 
     // Validate

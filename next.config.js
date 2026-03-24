@@ -5,21 +5,15 @@ const nextConfig = {
   reactStrictMode: false,
   poweredByHeader: false,
   compress: true,
-  
-  // API Routes - use serverless, NOT edge runtime (edge doesnt support state/intervals)
-  experimental: {
-    cacheMaxMemorySize: 52 * 1024 * 1024, // 52MB for ISR cache
-  },
-  
-  // Environment variables
-  env: {
-    BINANCE_KEY: process.env.BINANCE_KEY,
-    BINANCE_SECRET: process.env.BINANCE_SECRET,
-  },
 
-  // Webpack optimization
+  // Note: Do NOT expose secrets to browser via env object
+  // API routes access process.env.BINANCE_KEY directly (serverless/edge only)
+  
+  // Webpack optimization - ensures proper handling of Web Crypto API in edge runtime
   webpack: (config, { isServer }) => {
     if (isServer) {
+      // Mark 'crypto' as external to prevent bundling Node.js crypto module
+      // Edge runtime will use Web Crypto API (globalThis.crypto) instead
       config.externals.push('crypto');
     }
     return config;

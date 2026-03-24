@@ -5,15 +5,16 @@
  * Also runs on edge runtime for consistent latency
  */
 
+import { NextResponse } from "next/server";
 import { getStats } from "@/lib/rateLimiter.js";
 import { deduplicator } from "@/lib/deduplicator.js";
 
 export default function handler(req, res) {
   if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  res.status(200).json({
+  return NextResponse.json({
     proxy: {
       status: "healthy",
       timestamp: new Date().toISOString(),

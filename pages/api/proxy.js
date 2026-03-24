@@ -22,8 +22,8 @@
  */
 
 import crypto from 'crypto';
-import { checkRateLimit, consumeWeight, getStats } from '@/lib/rateLimiter';
-import { deduplicator } from '@/lib/deduplicator';
+import { checkRateLimit, consumeWeight, getStats } from '@/lib/rateLimiter.js';
+import { deduplicator } from '@/lib/deduplicator.js';
 
 const BINANCE_BASE = 'https://fapi.binance.com';
 

@@ -5,8 +5,8 @@
  * Serverless-compatible stats endpoint
  */
 
-import { getStats } from '@/lib/rateLimiter';
-import { deduplicator } from '@/lib/deduplicator';
+import { getStats } from '@/lib/rateLimiter.js';
+import { deduplicator } from '@/lib/deduplicator.js';
 
 export default function handler(req, res) {
   if (req.method !== 'GET') {

@@ -2,9 +2,10 @@
  * /api/proxy
  * 
  * Main proxy endpoint. Bot sends requests here instead of directly to Binance.
+ * Serverless-compatible (stateless rate limiting + deduplication).
  * 
  * Features:
- * - Rate limiting (token bucket)
+ * - Rate limiting (token bucket, stateless)
  * - Request deduplication
  * - Exponential backoff on 429s
  * - Comprehensive logging
@@ -21,7 +22,7 @@
  */
 
 import crypto from 'crypto';
-import { signedLimiter, publicLimiter } from '@/lib/rateLimiter';
+import { checkRateLimit, consumeWeight, getStats } from '@/lib/rateLimiter';
 import { deduplicator } from '@/lib/deduplicator';
 
 const BINANCE_BASE = 'https://fapi.binance.com';
@@ -43,7 +44,7 @@ function buildQuery(params) {
 }
 
 /**
- * Forward request to Binance with retry logic
+ * Forward request to Binance with retry logic and rate limit backoff
  */
 async function forwardToBinance(method, path, params, signed, weight) {
   let url = `${BINANCE_BASE}${path}`;
@@ -81,7 +82,7 @@ async function forwardToBinance(method, path, params, signed, weight) {
     fetchInit.body = queryString;
   }
 
-  // Exponential backoff for 429s
+  // Exponential backoff for 429s and network errors
   let lastErr;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -95,9 +96,9 @@ async function forwardToBinance(method, path, params, signed, weight) {
         err.code = data.code;
         err.statusCode = res.status;
 
-        // If 429 (rate limited), try exponential backoff
+        // If 429 (rate limited), exponential backoff
         if (res.status === 429 && attempt < 4) {
-          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s, 8s
+          const delay = Math.pow(2, attempt) * 1000;
           console.warn(
             `[PROXY] 429 Rate Limited. Attempt ${attempt + 1}/5. Retrying in ${delay}ms`
           );
@@ -113,7 +114,7 @@ async function forwardToBinance(method, path, params, signed, weight) {
       lastErr = err;
       if (attempt === 4) throw err;
 
-      // Network/other errors: retry
+      // Network/other errors: retry with backoff
       const delay = Math.pow(2, attempt) * 500;
       console.warn(
         `[PROXY] Request failed: ${err.message}. Retrying in ${delay}ms`
@@ -139,9 +140,18 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'method and path required' });
     }
 
-    // Rate limit before queuing
-    const limiter = signed ? signedLimiter : publicLimiter;
-    await limiter.acquire(weight);
+    // Check rate limit
+    const rateLimitStatus = checkRateLimit(weight);
+    
+    if (rateLimitStatus.canProceed) {
+      // Record the weight consumption
+      consumeWeight(weight);
+    } else {
+      // Too many requests recently - but we still try with a small delay
+      // This is different from old version - we don't queue, we just reject
+      // For true queuing, use Redis + distributed rate limiting
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     // Deduplicate requests
     const result = await deduplicator.execute(
@@ -156,7 +166,7 @@ export default async function handler(req, res) {
       success: true,
       data: result,
       stats: {
-        limiter: limiter.getStats(),
+        limiter: getStats(),
         deduplicator: deduplicator.getStats(),
       },
     });

@@ -2,9 +2,10 @@
  * /api/stats
  * 
  * Monitor proxy health and rate limiter state
+ * Serverless-compatible stats endpoint
  */
 
-import { signedLimiter, publicLimiter } from '@/lib/rateLimiter';
+import { getStats } from '@/lib/rateLimiter';
 import { deduplicator } from '@/lib/deduplicator';
 
 export default function handler(req, res) {
@@ -16,10 +17,10 @@ export default function handler(req, res) {
     proxy: {
       status: 'healthy',
       timestamp: new Date().toISOString(),
+      runtime: process.env.VERCEL ? 'vercel-serverless' : 'node',
     },
     limiters: {
-      signed: signedLimiter.getStats(),
-      public: publicLimiter.getStats(),
+      signed: getStats(),
     },
     deduplicator: deduplicator.getStats(),
   });

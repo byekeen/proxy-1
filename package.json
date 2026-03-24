@@ -1,7 +1,7 @@
 {
   "name": "binance-proxy",
   "version": "1.0.0",
-  "description": "Rate-limited Binance REST API proxy for scalping bot",
+  "description": "Production-grade rate-limited Binance REST API proxy for Vercel (serverless) deployment",
   "scripts": {
     "dev": "next dev -p 3006",
     "build": "next build",
@@ -13,8 +13,15 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
+  "optionalDependencies": {
+    "@upstash/redis": "^1.25.0"
+  },
   "devDependencies": {
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0"
+  },
+  "engines": {
+    "node": "18.x || 20.x"
   }
 }
+

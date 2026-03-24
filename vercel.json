@@ -1,0 +1,39 @@
+{
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "env": {
+    "BINANCE_KEY": "@binance_key",
+    "BINANCE_SECRET": "@binance_secret"
+  },
+  "functions": {
+    "pages/api/**": {
+      "maxDuration": 60,
+      "memory": 512
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/proxy",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-cache"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/api/stats",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=5"
+        }
+      ]
+    }
+  ]
+}

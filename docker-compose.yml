@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Binance Proxy (rate-limited API gateway)
+  proxy:
+    build: .
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=production
+      - PORT=3006
+      - BINANCE_KEY=${BINANCE_KEY}
+      - BINANCE_SECRET=${BINANCE_SECRET}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3006/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - trading
+
+networks:
+  trading:
+    driver: bridge

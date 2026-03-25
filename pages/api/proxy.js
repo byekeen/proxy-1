@@ -102,6 +102,16 @@ function buildQuery(params) {
 }
 
 /**
+ * Error codes that should NOT be retried (idempotent failures)
+ */
+const NO_RETRY_CODES = new Set([
+  -4046, // No need to change margin type (already set)
+  -2015, // Invalid API key/permissions (won't be fixed by retry)
+  -1022, // Signature does not match (won't be fixed by retry)
+  -1021, // Timestamp outside recvWindow (clock skew, retry won't help with same time)
+]);
+
+/**
  * Forward request to Binance with retry logic and rate limit backoff
  */
 async function forwardToBinance(method, path, params, signed, weight) {
@@ -113,40 +123,42 @@ async function forwardToBinance(method, path, params, signed, weight) {
       headers["X-MBX-APIKEY"] = process.env.BINANCE_KEY;
     }
 
-    let queryString = "";
-    if (signed) {
-      const signedParams = {
-        ...params,
-        timestamp: Date.now(),
-        recvWindow: 5000,
-      };
-      queryString = buildQuery(signedParams);
-      const signature = await sign(queryString, process.env.BINANCE_SECRET);
-      signedParams.signature = signature;
-      queryString = buildQuery(signedParams);
-    } else {
-      queryString = buildQuery(params);
-    }
-
-    if (method === "GET" || method === "DELETE") {
-      url += queryString ? `?${queryString}` : "";
-    }
-
-    const fetchInit = {
-      method,
-      headers,
-    };
-
-    if (method === "POST" || method === "PUT") {
-      headers["Content-Type"] = "application/x-www-form-urlencoded";
-      fetchInit.body = queryString;
-    }
-
     // Exponential backoff for 429s and network errors
     let lastErr;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        const res = await fetch(url, fetchInit);
+        // Generate fresh timestamp on each attempt (for time-sensitive requests)
+        let queryString = "";
+        if (signed) {
+          const signedParams = {
+            ...params,
+            timestamp: Date.now(),
+            recvWindow: 10000, // Increased from 5000 for clock skew tolerance
+          };
+          queryString = buildQuery(signedParams);
+          const signature = await sign(queryString, process.env.BINANCE_SECRET);
+          signedParams.signature = signature;
+          queryString = buildQuery(signedParams);
+        } else {
+          queryString = buildQuery(params);
+        }
+
+        let requestUrl = url;
+        if (method === "GET" || method === "DELETE") {
+          requestUrl += queryString ? `?${queryString}` : "";
+        }
+
+        const fetchInit = {
+          method,
+          headers,
+        };
+
+        if (method === "POST" || method === "PUT") {
+          headers["Content-Type"] = "application/x-www-form-urlencoded";
+          fetchInit.body = queryString;
+        }
+
+        const res = await fetch(requestUrl, fetchInit);
         const data = await res.json();
 
         if (!res.ok) {
@@ -166,12 +178,26 @@ async function forwardToBinance(method, path, params, signed, weight) {
             continue;
           }
 
+          // Don't retry on known idempotent failures
+          if (NO_RETRY_CODES.has(err.code)) {
+            console.error(
+              `[PROXY] Non-retryable error ${err.code}: ${data.msg}. Failing immediately.`,
+            );
+            throw err;
+          }
+
           throw err;
         }
 
         return data;
       } catch (err) {
         lastErr = err;
+        
+        // If error code is in no-retry list, don't retry
+        if (NO_RETRY_CODES.has(err.code)) {
+          throw err;
+        }
+        
         if (attempt === 4) throw err;
 
         // Network/other errors: retry with backoff
